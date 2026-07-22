@@ -1,4 +1,4 @@
-module github.com/dathan/go-project-template
+module github.com/dathan/go-pagerduty-jwt-stats
 
 go 1.25.0
 

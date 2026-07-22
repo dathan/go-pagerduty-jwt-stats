@@ -1,4 +1,4 @@
-# go-project-template — Design Document
+# go-pagerduty-jwt-stats — Design Document
 
 > **Purpose**: A reproducible Go project base for backends requiring web APIs, TUI clients,
 > OAuth authentication, agentic OS workflows, and a React frontend. Rename via `make setup REPO=<name>`.
@@ -22,7 +22,7 @@
 ## 2. Directory Layout
 
 ```
-go-project-template/
+go-pagerduty-jwt-stats/
 ├── cmd/
 │   ├── server/                  # HTTP server entrypoint
 │   │   └── main.go
@@ -30,7 +30,7 @@ go-project-template/
 │   │   └── main.go
 │   ├── agent/                   # Agent CLI (existing, extended)
 │   │   └── main.go
-│   └── go-project-template/     # Template placeholder entrypoint
+│   └── go-pagerduty-jwt-stats/     # Template placeholder entrypoint
 │       └── main.go
 │
 ├── internal/

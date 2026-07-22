@@ -27,7 +27,7 @@ RUN apk add -U --no-cache ca-certificates
 
 # ── Stage 4: Final image ───────────────────────────────────────────────────────
 FROM alpine:3.21 AS release
-LABEL org.opencontainers.image.source="https://github.com/dathan/go-project-template"
+LABEL org.opencontainers.image.source="https://github.com/dathan/go-pagerduty-jwt-stats"
 
 COPY --from=certs      /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=go-builder /app/bin/server                    /app/server

@@ -22,3 +22,7 @@ vendor
 # Ignore top-level api and bin dirs (root-anchored so frontend/src/api/ is not affected)
 /api
 /bin
+
+# PagerDuty curl files contain session cookies — never commit
+conf/*.curl
+*.curl

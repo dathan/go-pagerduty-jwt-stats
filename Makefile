@@ -15,7 +15,7 @@ GIT_OWNER     := $(shell git remote get-url origin 2>/dev/null \
                    || echo "unknown")
 
 BINARY_NAME   ?= $(PROJECT_NAME)
-SERVER_BINARY  = server
+SERVER_BINARY  = $(BINARY_NAME)
 TUI_BINARY     = tui
 AGENT_BINARY   = agent
 # ghcr.io/<owner>/<repo> — no double-segment; owner comes from the git remote.
@@ -42,8 +42,8 @@ setup:
 	@# Copy .env if missing
 	@[ -f .env ] || (cp .env.example .env && echo "  Created .env from .env.example — fill in secrets before running")
 	@[ -f frontend/.env ] || (cp frontend/.env.example frontend/.env && echo "  Created frontend/.env")
-	@# ── Rename go-project-template → PROJECT_NAME (idempotent) ──────────────
-	@# Read current module owner+name from go.mod, e.g. "github.com/dathan/go-project-template"
+	@# ── Rename go-pagerduty-jwt-stats → PROJECT_NAME (idempotent) ──────────────
+	@# Read current module owner+name from go.mod, e.g. "github.com/dathan/go-pagerduty-jwt-stats"
 	@CURR_MODULE=$$(grep '^module ' go.mod | awk '{print $$2}'); \
 	CURR_OWNER=$$(echo "$$CURR_MODULE" | sed -E 's|github.com/([^/]+)/.*|\1|'); \
 	CURR_NAME=$$(echo "$$CURR_MODULE" | sed -E 's|.*/([^/]+)$$|\1|'); \
