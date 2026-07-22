@@ -198,7 +198,7 @@ browser-check:
 
 # ── Docker ────────────────────────────────────────────────────────────────────
 docker-build:
-	docker build -t $(BINARY_NAME)-release .
+	docker buildx build -t $(BINARY_NAME)-release .
 
 docker-tag:
 	docker tag $$(docker image ls --filter 'reference=$(BINARY_NAME)-release' -q) \
