@@ -57,6 +57,13 @@ const DashboardTemplate = `<!DOCTYPE html>
       <span id="activeBadge" class="flex items-center gap-1.5"></span>
       <span class="text-slate-600">&middot;</span>
       <span>Fetched {{.FetchedAt}}</span>
+      {{if gt (len .Siblings) 1}}
+      <span class="text-slate-600">&middot;</span>
+      <select onchange="if(this.value)window.location.href=this.value" title="Switch window">
+        {{range .Siblings}}<option value="{{.Filename}}"{{if eq .Filename $.CurrentFile}} selected{{end}}>{{.Label}}</option>
+        {{end}}
+      </select>
+      {{end}}
       <a href="https://nvidia.pagerduty.com/teams/{{.TeamID}}/services" target="_blank"
          class="ml-2 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 text-slate-300 hover:border-lime-600 hover:text-lime-400 transition-colors">
         Open PagerDuty &rarr;

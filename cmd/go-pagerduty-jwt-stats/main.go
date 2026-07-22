@@ -88,6 +88,12 @@ type jsIncident struct {
 
 // ── Template data ─────────────────────────────────────────────────────────────
 
+// dashLink is one entry in the window-selector dropdown.
+type dashLink struct {
+	Label    string // human-readable range, e.g. "Jul 2 – Jul 9"
+	Filename string // basename of the output file, e.g. "dashboard_2026-07-09.html"
+}
+
 type dashData struct {
 	FetchedAt      string
 	WindowStart    string
@@ -100,6 +106,9 @@ type dashData struct {
 	AlertTypeCount int
 	PeakDay        string
 	PeakCount      int
+	// Window navigation dropdown
+	CurrentFile string
+	Siblings    []dashLink
 	// JSON strings injected directly into the HTML <script> block
 	AlertsJSON    string
 	SiteDataJSON  string
@@ -272,32 +281,50 @@ func main() {
 
 	outputBase := strings.TrimSuffix(*output, ".html")
 
-	for _, w := range windows {
-		winIncs := incidentsInWindow(allIncidents, w.start, w.end)
-
+	// Pre-compute filenames and human-readable labels for all windows so every
+	// dashboard can render a populated window-selector dropdown.
+	type windowMeta struct {
+		start, end time.Time
+		filename   string
+	}
+	metas := make([]windowMeta, len(windows))
+	siblings := make([]dashLink, len(windows))
+	for i, w := range windows {
 		filename := *output
 		if len(windows) > 1 {
 			filename = fmt.Sprintf("%s_%s.html", outputBase, w.end.Format("2006-01-02"))
 		}
+		metas[i] = windowMeta{w.start, w.end, filename}
+		siblings[i] = dashLink{
+			Label:    fmt.Sprintf("%s – %s", w.start.Format("Jan 2"), w.end.Format("Jan 2")),
+			Filename: filepath.Base(filename),
+		}
+	}
 
-		data := buildDash(winIncs, *teamID, w.start, w.end)
+	for i, m := range metas {
+		winIncs := incidentsInWindow(allIncidents, m.start, m.end)
 
-		f, err := os.Create(filename)
+		data := buildDash(winIncs, *teamID, m.start, m.end)
+		data.CurrentFile = filepath.Base(m.filename)
+		data.Siblings = siblings
+
+		f, err := os.Create(m.filename)
 		if err != nil {
-			log.Fatalf("create %s: %v", filename, err)
+			log.Fatalf("create %s: %v", m.filename, err)
 		}
 		if err := tmpl.Execute(f, data); err != nil {
 			f.Close()
-			log.Fatalf("render %s: %v", filename, err)
+			log.Fatalf("render %s: %v", m.filename, err)
 		}
 		f.Close()
 
-		abs, _ := filepath.Abs(filename)
+		abs, _ := filepath.Abs(m.filename)
 		log.Printf("written: %s  (%d incidents)", abs, len(winIncs))
 
 		if *open {
 			openBrowser(abs)
 		}
+		_ = i
 	}
 }
 
