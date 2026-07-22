@@ -198,9 +198,12 @@ frontend-build:
 frontend-dev:
 	cd frontend && npm run dev
 
-# ── Playwright ────────────────────────────────────────────────────────────────
-playwright-install:
-	go run github.com/playwright-community/playwright-go/cmd/playwright install --with-deps
+# ── Browser (chromedp uses system Chrome — no driver install needed) ──────────
+browser-check:
+	@which google-chrome chromium-browser chromium google-chrome-stable 2>/dev/null \
+		| head -1 \
+		| xargs -I{} sh -c 'echo "==> Chrome found: {}"' \
+		|| echo "WARNING: Chrome not found. Install Chrome to enable browser-based auth capture."
 
 # ── Docker ────────────────────────────────────────────────────────────────────
 docker-build: frontend-build

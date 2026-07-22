@@ -1,13 +1,15 @@
 package pdcapture
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/playwright-community/playwright-go"
+	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/chromedp"
 )
 
 const (
@@ -15,66 +17,80 @@ const (
 	captureTimeout = 5 * time.Minute
 )
 
-// Capture opens a headed Chromium browser, navigates to the PagerDuty analytics
-// page, and waits for the analytics XHR request to fire. It extracts the session
-// cookies from that request, writes a curl file to curlFilePath for future reuse,
-// and returns the raw cookie string.
+// Capture opens a headed Chrome browser, navigates to the PagerDuty analytics
+// page, and waits for the analytics XHR to fire. It extracts session cookies
+// from the browser's cookie store at that moment, writes them to curlFilePath
+// for future reuse, and returns the raw cookie string.
 //
-// If the user is not logged in, Capture waits up to captureTimeout for them to
-// complete login — the analytics XHR is captured automatically once the page loads.
+// Chrome must be installed (standard macOS/Linux install is sufficient —
+// no additional driver download is required).
+//
+// If the user is not yet logged in, Capture waits up to captureTimeout for
+// them to complete login. The cookies are captured automatically once the
+// analytics page loads and the XHR fires.
 func Capture(baseURL, curlFilePath string) (string, error) {
-	if err := ensureInstalled(); err != nil {
-		return "", err
-	}
+	allocCtx, allocCancel := chromedp.NewExecAllocator(
+		context.Background(),
+		append(chromedp.DefaultExecAllocatorOptions[:],
+			chromedp.Flag("headless", false),
+			chromedp.Flag("disable-background-timer-throttling", true),
+		)...,
+	)
+	defer allocCancel()
 
-	pw, err := playwright.Run()
-	if err != nil {
-		return "", fmt.Errorf("start playwright: %w\n  hint: run `make playwright-install` first", err)
-	}
-	defer pw.Stop()
+	ctx, ctxCancel := chromedp.NewContext(allocCtx)
+	defer ctxCancel()
 
-	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(false),
-	})
-	if err != nil {
-		return "", fmt.Errorf("launch chromium: %w", err)
-	}
-	defer browser.Close()
-
-	page, err := browser.NewPage()
-	if err != nil {
-		return "", fmt.Errorf("new page: %w", err)
-	}
+	ctx, timeoutCancel := context.WithTimeout(ctx, captureTimeout)
+	defer timeoutCancel()
 
 	cookieCh := make(chan string, 1)
-	page.OnRequest(func(req playwright.Request) {
-		if !strings.Contains(req.URL(), analyticsPath) {
+
+	// Listen for the analytics API response — fires once the user is logged in
+	// and the analytics page loads. We spawn a goroutine to avoid blocking the
+	// CDP event-dispatch loop.
+	chromedp.ListenTarget(ctx, func(ev interface{}) {
+		e, ok := ev.(*network.EventResponseReceived)
+		if !ok || !strings.Contains(string(e.Response.URL), analyticsPath) {
 			return
 		}
-		headers, err := req.AllHeaders()
-		if err != nil {
-			return
-		}
-		cookie := headers["cookie"]
-		if cookie == "" {
-			return
-		}
-		select {
-		case cookieCh <- cookie:
-		default:
-		}
+		go func() {
+			cookies, err := network.GetCookies().Do(ctx)
+			if err != nil || len(cookies) == 0 {
+				return
+			}
+			parts := make([]string, 0, len(cookies))
+			for _, c := range cookies {
+				parts = append(parts, c.Name+"="+c.Value)
+			}
+			select {
+			case cookieCh <- strings.Join(parts, "; "):
+			default:
+			}
+		}()
 	})
 
 	target := baseURL + "/analytics/insights/"
-	fmt.Fprintf(os.Stderr, "\n==> Browser opened: %s\n", target)
-	fmt.Fprintln(os.Stderr, "    Log in if prompted — cookies will be captured automatically once the analytics page loads.")
+	fmt.Fprintf(os.Stderr, "\n==> Opening browser: %s\n", target)
+	fmt.Fprintln(os.Stderr, "    Log in if prompted. Cookies will be captured automatically once the analytics page loads.")
 	fmt.Fprintf(os.Stderr, "    Waiting up to %v...\n\n", captureTimeout)
 
-	if _, err := page.Goto(target); err != nil {
-		// Non-fatal: a redirect to the login page causes Goto to error on some
-		// playwright builds. The request listener remains active so we keep waiting.
-		fmt.Fprintf(os.Stderr, "    (navigation: %v — waiting for login and redirect back)\n", err)
+	// Enable network monitoring then navigate. Navigation may redirect to login —
+	// that is expected and non-fatal. The browser stays open and the listener
+	// remains active until cookies are captured or the timeout fires.
+	if err := chromedp.Run(ctx, network.Enable()); err != nil {
+		return "", fmt.Errorf("enable network monitoring: %w", err)
 	}
+
+	// Navigate in a goroutine so we can enter the select below immediately.
+	// chromedp actions are serialized through the CDP session so this is safe.
+	go func() {
+		if err := chromedp.Run(ctx, chromedp.Navigate(target)); err != nil {
+			if !isContextErr(err) {
+				fmt.Fprintf(os.Stderr, "    (navigation: %v — waiting for login)\n", err)
+			}
+		}
+	}()
 
 	select {
 	case cookie := <-cookieCh:
@@ -84,29 +100,18 @@ func Capture(baseURL, curlFilePath string) (string, error) {
 			fmt.Fprintf(os.Stderr, "==> Session saved to %s\n\n", curlFilePath)
 		}
 		return cookie, nil
-
-	case <-time.After(captureTimeout):
+	case <-ctx.Done():
 		return "", fmt.Errorf("timed out after %v — did you complete login in the browser?", captureTimeout)
 	}
 }
 
-// ensureInstalled installs the playwright driver + chromium browser if not already
-// present. The install is idempotent and skips the download when up to date.
-func ensureInstalled() error {
-	err := playwright.Install(&playwright.RunOptions{
-		Browsers: []string{"chromium"},
-		Verbose:  false,
-		Stdout:   os.Stderr,
-		Stderr:   os.Stderr,
-	})
-	if err != nil {
-		return fmt.Errorf("install playwright chromium: %w", err)
-	}
-	return nil
+func isContextErr(err error) bool {
+	s := err.Error()
+	return strings.Contains(s, "context canceled") || strings.Contains(s, "context deadline exceeded")
 }
 
-// saveCurlFile writes a minimal curl command containing the captured cookie so
-// that parseCurlCookies in main can read it back on the next run.
+// saveCurlFile writes a curl command in the format parseCurlCookies expects,
+// so the next run can skip browser capture entirely.
 func saveCurlFile(path, baseURL, cookie string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
