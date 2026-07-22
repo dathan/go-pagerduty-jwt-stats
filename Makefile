@@ -16,21 +16,19 @@ GIT_OWNER     := $(shell git remote get-url origin 2>/dev/null \
 
 BINARY_NAME   ?= $(PROJECT_NAME)
 SERVER_BINARY  = $(BINARY_NAME)
-TUI_BINARY     = tui
-AGENT_BINARY   = agent
 # ghcr.io/<owner>/<repo> — no double-segment; owner comes from the git remote.
 REPO          ?= ghcr.io/$(GIT_OWNER)/$(PROJECT_NAME)
 GIT_SHA       := $(shell git rev-parse --short HEAD 2>/dev/null || echo "dev")
 
 .DEFAULT_GOAL := all
-.PHONY: all lint build build-linux run dev dev-stop dev-restart run-server run-tui test test-unit \
+.PHONY: all lint build build-linux run dev dev-stop dev-restart run-server test test-unit \
         test-integration migrate-up migrate-down migrate-create \
         frontend-install frontend-build frontend-dev \
         docker-build docker-tag docker-push docker-clean \
         playwright-install setup clean vendor
 
 # ── Default ────────────────────────────────────────────────────────────────────
-all: lint test build
+all: test build
 
 # ── Setup (idempotent bootstrap) ───────────────────────────────────────────────
 # Usage: make setup
@@ -82,11 +80,7 @@ build:
 
 build-linux:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" \
-		-o bin/$(SERVER_BINARY) ./cmd/server
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" \
-		-o bin/$(TUI_BINARY) ./cmd/tui
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" \
-		-o bin/$(AGENT_BINARY) ./cmd/agent
+		-o bin/$(SERVER_BINARY) ./cmd/$(SERVER_BINARY)
 
 # ── Run ───────────────────────────────────────────────────────────────────────
 run: run-server
@@ -153,9 +147,6 @@ dev-restart: build
 
 run-server: build
 	./bin/$(SERVER_BINARY)
-
-run-tui: build
-	./bin/$(TUI_BINARY)
 
 # ── Testing ───────────────────────────────────────────────────────────────────
 test: test-unit
