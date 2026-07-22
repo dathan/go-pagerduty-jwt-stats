@@ -17,7 +17,9 @@ import (
 	"strings"
 	"text/template"
 	"time"
+
 	"github.com/dathan/go-pagerduty-jwt-stats/pkg/dashboard"
+	"github.com/dathan/go-pagerduty-jwt-stats/pkg/pdcapture"
 )
 
 const (
@@ -170,22 +172,8 @@ func main() {
 	open    := flag.Bool("open", false, "Open dashboard(s) in browser after writing")
 	flag.Parse()
 
-	cookieStr := *cookies
-
-	// Prefer curl file: parse the -b '...' value directly so shell quoting never matters.
-	if *curlFile != "" {
-		parsed, err := cookiesFromCurlFile(*curlFile)
-		if err != nil {
-			log.Fatalf("curl-file: %v", err)
-		}
-		cookieStr = parsed
-		log.Printf("auth: loaded cookies from curl file %q", *curlFile)
-	}
-
+	// --site and --team are always required; auth can be obtained via browser.
 	var missing []string
-	if cookieStr == "" {
-		missing = append(missing, "--curl-file or --cookies (auth required)")
-	}
 	if *subDomain == "" {
 		missing = append(missing, "--site")
 	}
@@ -195,6 +183,38 @@ func main() {
 	if len(missing) > 0 {
 		usageString(missing)
 		os.Exit(1)
+	}
+
+	// baseURL is needed before auth so browser capture can navigate to the right host.
+	if *baseURL == "" {
+		*baseURL = fmt.Sprintf(defaultBaseURL, *subDomain)
+	}
+
+	cookieStr := *cookies
+
+	// 1. Prefer explicit curl file.
+	if *curlFile != "" {
+		parsed, err := cookiesFromCurlFile(*curlFile)
+		if err != nil {
+			log.Printf("auth: curl-file %q unusable (%v) — falling back to browser capture", *curlFile, err)
+		} else {
+			cookieStr = parsed
+			log.Printf("auth: loaded cookies from curl file %q", *curlFile)
+		}
+	}
+
+	// 2. Fall back to browser capture when no cookies are available.
+	if cookieStr == "" {
+		curlPath := *curlFile
+		if curlPath == "" {
+			curlPath = "conf/pd.curl"
+		}
+		log.Printf("auth: no cookies found — launching browser capture")
+		captured, err := pdcapture.Capture(*baseURL, curlPath)
+		if err != nil {
+			log.Fatalf("browser capture: %v", err)
+		}
+		cookieStr = captured
 	}
 
 	// Align until to start of tomorrow so today's incidents are always included
@@ -221,12 +241,27 @@ func main() {
 	log.Printf("team=%s  range=%s to %s  window=%dd  dashboards=%d",
 		*teamID, since.Format("2006-01-02"), until.Format("2006-01-02"), *window, len(windows))
 
-	*baseURL = fmt.Sprintf(defaultBaseURL, *subDomain)
-
 	// Fetch the full range once; filter per window in memory.
+	// On 401, the session has expired — relaunch the browser to refresh cookies and retry once.
 	allIncidents, err := fetchAll(cookieStr, *baseURL, *teamID, since, until)
 	if err != nil {
-		log.Fatalf("fetch: %v", err)
+		if !strings.Contains(err.Error(), "401") {
+			log.Fatalf("fetch: %v", err)
+		}
+		log.Printf("auth: session expired (HTTP 401) — relaunching browser to refresh cookies")
+		curlPath := *curlFile
+		if curlPath == "" {
+			curlPath = "conf/pd.curl"
+		}
+		refreshed, captureErr := pdcapture.Capture(*baseURL, curlPath)
+		if captureErr != nil {
+			log.Fatalf("browser capture: %v", captureErr)
+		}
+		cookieStr = refreshed
+		allIncidents, err = fetchAll(cookieStr, *baseURL, *teamID, since, until)
+		if err != nil {
+			log.Fatalf("fetch after re-auth: %v", err)
+		}
 	}
 	log.Printf("fetched %d incidents total", len(allIncidents))
 
