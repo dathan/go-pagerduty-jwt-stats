@@ -321,10 +321,9 @@ func main() {
 		abs, _ := filepath.Abs(m.filename)
 		log.Printf("written: %s  (%d incidents)", abs, len(winIncs))
 
-		if *open {
+		if *open && i == len(metas)-1 {
 			openBrowser(abs)
 		}
-		_ = i
 	}
 }
 
