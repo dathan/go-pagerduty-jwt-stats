@@ -197,7 +197,7 @@ browser-check:
 		|| echo "WARNING: Chrome not found. Install Chrome to enable browser-based auth capture."
 
 # ── Docker ────────────────────────────────────────────────────────────────────
-docker-build: frontend-build
+docker-build:
 	docker build -t $(BINARY_NAME)-release .
 
 docker-tag:
