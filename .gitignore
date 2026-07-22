@@ -26,3 +26,6 @@ vendor
 # PagerDuty curl files contain session cookies — never commit
 conf/*.curl
 *.curl
+
+# Generated dashboards
+dashboard*.html
