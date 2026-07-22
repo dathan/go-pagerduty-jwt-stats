@@ -301,6 +301,13 @@ func main() {
 		}
 	}
 
+	// Append the full-range entry last so all dashboards include it in the dropdown.
+	fullFilename := outputBase + "_full.html"
+	siblings = append(siblings, dashLink{
+		Label:    fmt.Sprintf("%s – %s (all)", since.Format("Jan 2"), until.Format("Jan 2")),
+		Filename: filepath.Base(fullFilename),
+	})
+
 	for i, m := range metas {
 		winIncs := incidentsInWindow(allIncidents, m.start, m.end)
 
@@ -325,6 +332,24 @@ func main() {
 			openBrowser(abs)
 		}
 	}
+
+	// Full-range dashboard covering the entire --days span.
+	fullIncs := incidentsInWindow(allIncidents, since, until)
+	fullData := buildDash(fullIncs, *teamID, since, until)
+	fullData.CurrentFile = filepath.Base(fullFilename)
+	fullData.Siblings = siblings
+
+	ff, err := os.Create(fullFilename)
+	if err != nil {
+		log.Fatalf("create %s: %v", fullFilename, err)
+	}
+	if err := tmpl.Execute(ff, fullData); err != nil {
+		ff.Close()
+		log.Fatalf("render %s: %v", fullFilename, err)
+	}
+	ff.Close()
+	absF, _ := filepath.Abs(fullFilename)
+	log.Printf("written: %s  (%d incidents)", absF, len(fullIncs))
 }
 
 func usageString(missing []string) {
