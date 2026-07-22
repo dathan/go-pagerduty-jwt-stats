@@ -1,5 +1,5 @@
 # ── Stage 1: Build frontend ────────────────────────────────────────────────────
-FROM node:20-alpine AS frontend-builder
+FROM node:22-alpine AS frontend-builder
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci --prefer-offline
@@ -7,7 +7,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # ── Stage 2: Build Go binary ───────────────────────────────────────────────────
-FROM golang:1.25-alpine AS go-builder
+FROM golang:1.26-alpine AS go-builder
 ENV CGO_ENABLED=0
 RUN apk add --no-cache git make
 
