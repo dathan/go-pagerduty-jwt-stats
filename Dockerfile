@@ -11,11 +11,11 @@ COPY . .
 RUN make build-linux
 
 # ── Stage 2: CA certs ─────────────────────────────────────────────────────────
-FROM alpine:3.21 AS certs
+FROM alpine:3.24 AS certs
 RUN apk add -U --no-cache ca-certificates
 
 # ── Stage 3: Final image ───────────────────────────────────────────────────────
-FROM alpine:3.21 AS release
+FROM alpine:3.24 AS release
 LABEL org.opencontainers.image.source="https://github.com/dathan/go-pagerduty-jwt-stats"
 
 COPY --from=certs      /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
