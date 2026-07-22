@@ -23,13 +23,14 @@ import (
 )
 
 const (
-	defaultSubD	= "" // this needs to be defined
-	defaultBaseURL  = "https://%s.pagerduty.com"
-	analyticsPath   = "/api/v2/analytics/raw/incidents"
-	defaultTeamID   = "" // this needs to be defined
-	defaultDays     = 21
-	defaultWindow   = 7
-	defaultOutput   = "dashboard.html"
+	defaultSubD      = "" // this needs to be defined
+	defaultBaseURL   = "https://%s.pagerduty.com"
+	analyticsPath    = "/api/v2/analytics/raw/incidents"
+	defaultTeamID    = "" // this needs to be defined
+	defaultDays      = 21
+	defaultWindow    = 7
+	defaultOutput    = "dashboard.html"
+	defaultOutputDir = "output"
 )
 
 // ── PagerDuty Analytics API types ────────────────────────────────────────────
@@ -177,9 +178,14 @@ func main() {
 	teamID  := flag.String("team", defaultTeamID, "PagerDuty team ID")
 	days    := flag.Int("days", defaultDays, "Total days back to query")
 	window  := flag.Int("window", defaultWindow, "Window size in days per dashboard (generates one file per window across --days range)")
-	output  := flag.String("output", defaultOutput, "Output HTML file (used as-is for single window; date suffix added for multiple)")
-	open    := flag.Bool("open", false, "Open dashboard(s) in browser after writing")
+	output    := flag.String("output", defaultOutput, "Output HTML file basename (date suffix added for multiple windows)")
+	outputDir := flag.String("output-dir", defaultOutputDir, "Directory to write dashboard HTML files into")
+	open      := flag.Bool("open", false, "Open dashboard(s) in browser after writing")
 	flag.Parse()
+
+	if err := os.MkdirAll(*outputDir, 0o755); err != nil {
+		log.Fatalf("create output dir %q: %v", *outputDir, err)
+	}
 
 	// --site and --team are always required; auth can be obtained via browser.
 	var missing []string
@@ -279,7 +285,7 @@ func main() {
 		log.Fatalf("parse template: %v", err)
 	}
 
-	outputBase := strings.TrimSuffix(*output, ".html")
+	outputBase := filepath.Join(*outputDir, strings.TrimSuffix(*output, ".html"))
 
 	// Pre-compute filenames and human-readable labels for all windows so every
 	// dashboard can render a populated window-selector dropdown.

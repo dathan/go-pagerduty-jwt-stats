@@ -29,3 +29,4 @@ conf/*.curl
 
 # Generated dashboards
 dashboard*.html
+/output/
